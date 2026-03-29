@@ -3,6 +3,7 @@ matplotlib
 nltk
 numpy
 pandas
+PyYAML
 scikit_learn
 torch
 torchvision
