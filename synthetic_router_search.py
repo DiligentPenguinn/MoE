@@ -1,4 +1,4 @@
-"""YAML-backed search-space loading and random sampling."""
+"""YAML-backed experiment config loading and random sampling."""
 
 import math
 import random
@@ -42,10 +42,17 @@ def validate_distribution_spec(name: str, spec: Any) -> Dict[str, Any]:
     return spec
 
 
-def load_search_space(path: Path) -> Dict[str, Any]:
-    payload = load_yaml(path)
-    shared = payload.get("shared")
-    families = payload.get("families")
+def load_search_space(payload_or_path) -> Dict[str, Any]:
+    if isinstance(payload_or_path, (str, Path)):
+        payload = load_yaml(Path(payload_or_path))
+    else:
+        payload = payload_or_path
+
+    search_space = payload.get("search_space", payload)
+    if not isinstance(search_space, dict):
+        raise ValueError("Expected 'search_space' to be a mapping in the config YAML.")
+    shared = search_space.get("shared")
+    families = search_space.get("families")
     if not isinstance(shared, dict):
         raise ValueError("Search space YAML must contain a 'shared' mapping.")
     if not isinstance(families, dict):
@@ -72,7 +79,7 @@ def load_search_space(path: Path) -> Dict[str, Any]:
         if family == "muon":
             validate_distribution_spec(f"families.{family}.ns_steps", family_spec.get("ns_steps"))
 
-    return {"path": path, "shared": shared, "families": families}
+    return {"shared": shared, "families": families}
 
 
 def sample_from_spec(name: str, spec: Dict[str, Any], rng: random.Random) -> Any:

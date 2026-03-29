@@ -26,6 +26,11 @@ def set_seed(seed: int) -> None:
         torch.cuda.manual_seed_all(seed)
 
 
+def log_progress(message: str, quiet: bool = False) -> None:
+    if not quiet:
+        print(message, flush=True)
+
+
 def maybe_collect_plot_diagnostics(model, setting_data: SettingData) -> Dict[str, Any]:
     expert_feature = [[] for _ in range(model.expert_num)]
     expert_center = [[] for _ in range(model.expert_num)]
@@ -185,8 +190,12 @@ def run_single_experiment(
     evaluate_on_test: bool = False,
     plot: bool = False,
     quiet: bool = False,
+    progress_label: Optional[str] = None,
 ) -> Dict[str, Any]:
     set_seed(seed)
+    if progress_label:
+        split_name = "test" if evaluate_on_test else "validation"
+        log_progress(f"{progress_label} | seed={seed} | eval={split_name} | start", quiet)
 
     train_data = tensor_subset(setting_data.train_data, train_indices, device)
     train_labels = tensor_subset(setting_data.train_labels, train_indices, device)
@@ -230,6 +239,16 @@ def run_single_experiment(
         split_name=split_name,
         verbose=not quiet,
     )
+    if progress_label:
+        log_progress(
+            (
+                f"{progress_label} | done | "
+                f"acc={eval_metrics['accuracy']:.4f} | "
+                f"loss={eval_metrics['loss']:.4f} | "
+                f"train_s={train_metrics['runtime_seconds']:.2f}"
+            ),
+            quiet,
+        )
 
     return {
         "setting": setting_data.setting,
@@ -247,6 +266,45 @@ def mean_std(values: Sequence[float]) -> Tuple[Optional[float], Optional[float]]
         return None, None
     arr = np.asarray(values, dtype=float)
     return float(arr.mean()), float(arr.std())
+
+
+def top_margin_per_row(matrix: np.ndarray) -> List[float]:
+    if matrix.ndim != 2 or matrix.shape[1] < 2:
+        return [0.0 for _ in range(matrix.shape[0])]
+    partition = np.partition(matrix, -2, axis=1)
+    top1 = partition[:, -1]
+    top2 = partition[:, -2]
+    return (top1 - top2).tolist()
+
+
+def summarize_specialization_diagnostics(results: Sequence[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    diagnostics = [
+        result["train_metrics"].get("plot_diagnostics")
+        for result in results
+        if result["train_metrics"].get("plot_diagnostics") is not None
+    ]
+    if not diagnostics:
+        return None
+
+    expert_feature = np.mean([np.asarray(item["expert_feature"], dtype=float) for item in diagnostics], axis=0)
+    expert_center = np.mean([np.asarray(item["expert_center"], dtype=float) for item in diagnostics], axis=0)
+    router_feature = np.mean([np.asarray(item["router_feature"], dtype=float) for item in diagnostics], axis=0)
+    router_center = np.mean([np.asarray(item["router_center"], dtype=float) for item in diagnostics], axis=0)
+    if router_feature.ndim == 3 and router_feature.shape[-1] == 1:
+        router_feature = np.squeeze(router_feature, axis=-1)
+    if router_center.ndim == 3 and router_center.shape[-1] == 1:
+        router_center = np.squeeze(router_center, axis=-1)
+
+    return {
+        "expert_feature_mean": expert_feature.tolist(),
+        "expert_center_mean": expert_center.tolist(),
+        "router_feature_mean": router_feature.tolist(),
+        "router_center_mean": router_center.tolist(),
+        "expert_dominant_clusters": np.argmax(expert_center, axis=1).astype(int).tolist(),
+        "expert_center_margins": top_margin_per_row(expert_center),
+        "router_peak_experts_by_cluster": np.argmax(router_center, axis=1).astype(int).tolist(),
+        "router_center_peak_values": np.max(router_center, axis=1).tolist(),
+    }
 
 
 def aggregate_trial_results(fold_results: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
@@ -292,6 +350,7 @@ def aggregate_final_results(results: Sequence[Dict[str, Any]]) -> Dict[str, Any]
         "std_train_runtime_seconds": train_runtime_std,
         "mean_total_runtime_seconds": total_runtime_mean,
         "std_total_runtime_seconds": total_runtime_std,
+        "specialization_summary": summarize_specialization_diagnostics(results),
     }
 
 
@@ -318,6 +377,10 @@ def tune_family_for_setting(setting_data: SettingData, family: str, args, device
     splits = args.cv_splits_by_setting[setting]
     rng = random.Random(args.seed + setting * 100 + (0 if family == "muon" else 1))
     trial_records = []
+    log_progress(
+        f"[Tune] setting=s{setting} optimizer={family} | trials={args.search_budget} | folds={len(splits)}",
+        args.quiet,
+    )
 
     for trial_index in range(args.search_budget):
         config = sample_search_config(
@@ -326,16 +389,40 @@ def tune_family_for_setting(setting_data: SettingData, family: str, args, device
             rng=rng,
             epochs=args.epochs,
             load_balancing=args.load_balancing,
-            early_stopping=not args.no_early_stopping,
+            early_stopping=args.early_stopping,
         )
         trial_path = trial_dir(args.run_dir, setting, family, trial_index)
         fold_results = []
+        config_bits = [
+            f"experts={config['expert_num']}",
+            f"expert_lr={config['expert_lr']}",
+            f"router_lr={config['router_lr']}",
+        ]
+        if "ns_steps" in config:
+            config_bits.append(f"ns_steps={config['ns_steps']}")
+        log_progress(
+            f"[Tune] setting=s{setting} optimizer={family} | trial {trial_index + 1}/{args.search_budget} | "
+            + " ".join(config_bits),
+            args.quiet,
+        )
 
         for fold_index, (train_idx, val_idx) in enumerate(splits):
             fold_path = trial_path / f"fold_{fold_index:02d}.json"
             if args.resume and fold_path.exists():
                 fold_result = load_json(fold_path)
+                log_progress(
+                    (
+                        f"[Tune] setting=s{setting} optimizer={family} | trial {trial_index + 1}/{args.search_budget} | "
+                        f"fold {fold_index + 1}/{len(splits)} | cache hit | "
+                        f"acc={fold_result['eval_metrics']['accuracy']:.4f}"
+                    ),
+                    args.quiet,
+                )
             else:
+                progress_label = (
+                    f"[Tune] setting=s{setting} optimizer={family} | "
+                    f"trial {trial_index + 1}/{args.search_budget} | fold {fold_index + 1}/{len(splits)}"
+                )
                 fold_result = run_single_experiment(
                     setting_data=setting_data,
                     config=config,
@@ -347,17 +434,19 @@ def tune_family_for_setting(setting_data: SettingData, family: str, args, device
                     evaluate_on_test=False,
                     plot=False,
                     quiet=args.quiet,
+                    progress_label=progress_label,
                 )
                 fold_result["fold_index"] = fold_index
                 save_json(fold_path, fold_result)
             fold_results.append(fold_result)
 
+        summary = aggregate_trial_results(fold_results)
         trial_record = {
             "setting": setting,
             "optimizer_family": family,
             "trial_index": trial_index,
             "config": config,
-            "summary": aggregate_trial_results(fold_results),
+            "summary": summary,
             "fold_files": [
                 str((trial_path / f"fold_{fold_index:02d}.json").relative_to(args.run_dir))
                 for fold_index in range(len(splits))
@@ -365,6 +454,13 @@ def tune_family_for_setting(setting_data: SettingData, family: str, args, device
         }
         save_json(trial_path / "trial_summary.json", trial_record)
         trial_records.append(trial_record)
+        log_progress(
+            (
+                f"[Tune] setting=s{setting} optimizer={family} | trial {trial_index + 1}/{args.search_budget} | "
+                f"mean_acc={summary['mean_val_accuracy']:.4f} | mean_loss={summary['mean_val_loss']:.4f}"
+            ),
+            args.quiet,
+        )
 
     best_trial = select_best_trial(trial_records)
     best_payload = {
@@ -375,6 +471,14 @@ def tune_family_for_setting(setting_data: SettingData, family: str, args, device
         "summary": best_trial["summary"],
     }
     save_json(family_dir / "best_config.json", best_payload)
+    log_progress(
+        (
+            f"[Tune] setting=s{setting} optimizer={family} | best trial={best_payload['best_trial_index']} | "
+            f"cv_acc={best_payload['summary']['mean_val_accuracy']:.4f} | "
+            f"experts={best_payload['best_config']['expert_num']}"
+        ),
+        args.quiet,
+    )
     return best_payload
 
 
@@ -383,11 +487,11 @@ def tune_all(args, device: torch.device) -> Dict[int, Dict[str, Dict[str, Any]]]
     for setting in args.settings:
         setting_data = load_setting(setting)
         setting_best = {}
+        log_progress(f"[Tune] setting=s{setting} | start", args.quiet)
         for family in args.optimizers:
-            if not args.quiet:
-                print(f"Tuning {family} on setting s{setting}")
             setting_best[family] = tune_family_for_setting(setting_data, family, args, device)
         all_best[setting] = setting_best
+        log_progress(f"[Tune] setting=s{setting} | complete", args.quiet)
     return all_best
 
 
@@ -398,12 +502,15 @@ def run_final_trials(setting_data: SettingData, best_config: Dict[str, Any], arg
     final_path = final_dir / f"{family}.json"
 
     if args.resume and final_path.exists():
+        log_progress(f"[Final] setting=s{setting_data.setting} optimizer={family} | cache hit", args.quiet)
         return load_json(final_path)
 
     results = []
     for trial_index in range(args.final_trials):
-        if not args.quiet:
-            print(f"Final evaluation {family} on s{setting_data.setting}: trial {trial_index + 1}/{args.final_trials}")
+        progress_label = (
+            f"[Final] setting=s{setting_data.setting} optimizer={family} | "
+            f"trial {trial_index + 1}/{args.final_trials}"
+        )
         results.append(
             run_single_experiment(
                 setting_data=setting_data,
@@ -414,8 +521,9 @@ def run_final_trials(setting_data: SettingData, best_config: Dict[str, Any], arg
                 train_indices=None,
                 eval_indices=None,
                 evaluate_on_test=True,
-                plot=False,
+                plot=True,
                 quiet=args.quiet,
+                progress_label=progress_label,
             )
         )
 
@@ -427,4 +535,12 @@ def run_final_trials(setting_data: SettingData, best_config: Dict[str, Any], arg
         "trials": results,
     }
     save_json(final_path, payload)
+    log_progress(
+        (
+            f"[Final] setting=s{setting_data.setting} optimizer={family} | "
+            f"mean_test_acc={payload['summary']['mean_test_accuracy']:.4f} | "
+            f"experts={payload['best_config']['expert_num']}"
+        ),
+        args.quiet,
+    )
     return payload

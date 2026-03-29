@@ -282,6 +282,29 @@ def generate_report(run_dir: Path) -> Dict[str, Any]:
                 + " |"
             )
         lines.append("")
+        for family in families:
+            final_payload = final_results.get(setting, {}).get(family, {})
+            specialization = final_payload.get("summary", {}).get("specialization_summary")
+            if not specialization:
+                continue
+            margins = [round(value, 4) for value in specialization.get("expert_center_margins", [])]
+
+            def flatten_singletons(value):
+                while isinstance(value, list) and len(value) == 1:
+                    value = value[0]
+                return value
+
+            router_peaks = []
+            for item in specialization.get("router_peak_experts_by_cluster", []):
+                router_peaks.append(flatten_singletons(item))
+            dominant_clusters = specialization.get("expert_dominant_clusters", [])
+            lines.append(
+                f"- `{family}` specialization: dominant expert clusters={dominant_clusters}, "
+                f"center margins={margins}"
+            )
+            lines.append(f"- `{family}` router peaks by cluster: {router_peaks}")
+        if families:
+            lines.append("")
 
     report_path = run_dir / "report.md"
     ensure_parent(report_path)

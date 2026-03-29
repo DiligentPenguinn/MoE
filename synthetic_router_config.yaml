@@ -1,0 +1,78 @@
+run:
+  seed: 11
+  epochs: 601
+  load_balancing: false
+  early_stopping: true
+  linear: false
+  quiet: false
+
+train:
+  setting: 1
+  optimizer_family: muon
+  expert_num: 8
+  trials: 1
+  plot: false
+  output_json:
+
+tune:
+  settings: [1, 2, 3, 4]
+  optimizers: [muon, original]
+  cv_folds: 2
+  search_budget: 16
+  resume: true
+  run_dir:
+
+pipeline:
+  settings: [1, 2, 3, 4]
+  optimizers: [muon, original]
+  cv_folds: 3
+  search_budget: 24
+  final_trials: 5
+  resume: true
+  run_dir:
+
+optimizer:
+  expert_lr: 1.0e-3
+  expert_momentum: 0.95
+  expert_weight_decay: 0.0
+  router_lr: 2.0e-2
+  router_momentum: 0.95
+  router_weight_decay: 0.0
+  ns_steps: 5
+
+search_space:
+  shared:
+    expert_num_options: [4, 8]
+    expert_lr:
+      type: log_uniform
+      low: 5.0e-4
+      high: 5.0e-3
+    expert_momentum:
+      type: uniform
+      low: 0.85
+      high: 0.99
+    expert_weight_decay:
+      type: choice
+      values: [0.0, 1.0e-5, 1.0e-4, 1.0e-3]
+    router_momentum:
+      type: uniform
+      low: 0.85
+      high: 0.99
+    router_weight_decay:
+      type: choice
+      values: [0.0, 1.0e-5, 1.0e-4, 1.0e-3]
+
+  families:
+    original:
+      router_lr:
+        type: log_uniform
+        low: 1.0e-2
+        high: 3.0e-1
+    muon:
+      router_lr:
+        type: log_uniform
+        low: 5.0e-3
+        high: 1.0e-1
+      ns_steps:
+        type: choice
+        values: [3, 5, 7, 10]
