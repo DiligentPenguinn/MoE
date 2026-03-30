@@ -1,0 +1,29 @@
+{
+  "best_config": {
+    "early_stopping": true,
+    "epochs": 601,
+    "expert_lr": 0.00152724,
+    "expert_momentum": 0.944391,
+    "expert_num": 8,
+    "expert_weight_decay": 0.0,
+    "load_balancing": false,
+    "ns_steps": 3,
+    "optimizer_family": "muon",
+    "router_lr": 0.00892244,
+    "router_momentum": 0.989388,
+    "router_weight_decay": 0.0001
+  },
+  "best_trial_index": 22,
+  "optimizer_family": "muon",
+  "setting": 4,
+  "summary": {
+    "mean_runtime_seconds": 50.63568982789293,
+    "mean_val_accuracy": 96.84375,
+    "mean_val_entropy": 0.3833529531955719,
+    "mean_val_loss": 0.3448240637779236,
+    "std_runtime_seconds": 0.2154416244581302,
+    "std_val_accuracy": 0.9059266664581631,
+    "std_val_entropy": 0.12802160280732172,
+    "std_val_loss": 0.009059238595178376
+  }
+}

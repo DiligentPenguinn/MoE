@@ -1,0 +1,22 @@
+{
+  "command": "pipeline",
+  "config": "/home/e/e1129930/MoE/synthetic_router_config.yaml",
+  "cv_folds": 5,
+  "early_stopping": true,
+  "epochs": 601,
+  "final_trials": 5,
+  "linear": false,
+  "load_balancing": false,
+  "optimizers": [
+    "muon",
+    "original"
+  ],
+  "search_budget": 24,
+  "seed": 11,
+  "settings": [
+    1,
+    2,
+    3,
+    4
+  ]
+}

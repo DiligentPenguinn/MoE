@@ -1,0 +1,35 @@
+{
+  "config": {
+    "early_stopping": true,
+    "epochs": 601,
+    "expert_lr": 0.00098395,
+    "expert_momentum": 0.875867,
+    "expert_num": 4,
+    "expert_weight_decay": 0.0001,
+    "load_balancing": false,
+    "optimizer_family": "original",
+    "router_lr": 0.13909528,
+    "router_momentum": 0.939587,
+    "router_weight_decay": 1e-05
+  },
+  "fold_files": [
+    "tuning/setting_s2/original/trial_001/fold_00.json",
+    "tuning/setting_s2/original/trial_001/fold_01.json",
+    "tuning/setting_s2/original/trial_001/fold_02.json",
+    "tuning/setting_s2/original/trial_001/fold_03.json",
+    "tuning/setting_s2/original/trial_001/fold_04.json"
+  ],
+  "optimizer_family": "original",
+  "setting": 2,
+  "summary": {
+    "mean_runtime_seconds": 22.049652223754673,
+    "mean_val_accuracy": 94.425,
+    "mean_val_entropy": 0.5185369364917278,
+    "mean_val_loss": 0.368714314699173,
+    "std_runtime_seconds": 8.797319700731187,
+    "std_val_accuracy": 3.6921898143242853,
+    "std_val_entropy": 0.38466517033553776,
+    "std_val_loss": 0.03664524959643445
+  },
+  "trial_index": 1
+}

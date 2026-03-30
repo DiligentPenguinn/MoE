@@ -1,0 +1,28 @@
+{
+  "best_config": {
+    "early_stopping": true,
+    "epochs": 601,
+    "expert_lr": 0.00099999,
+    "expert_momentum": 0.888952,
+    "expert_num": 8,
+    "expert_weight_decay": 0.001,
+    "load_balancing": false,
+    "optimizer_family": "original",
+    "router_lr": 0.06104444,
+    "router_momentum": 0.988235,
+    "router_weight_decay": 0.0
+  },
+  "best_trial_index": 23,
+  "optimizer_family": "original",
+  "setting": 4,
+  "summary": {
+    "mean_runtime_seconds": 49.8156738021411,
+    "mean_val_accuracy": 99.26875,
+    "mean_val_entropy": 0.04044572189450264,
+    "mean_val_loss": 0.32060652375221255,
+    "std_runtime_seconds": 0.16424084112266726,
+    "std_val_accuracy": 0.21794494717703367,
+    "std_val_entropy": 0.008230225333583176,
+    "std_val_loss": 0.002203029830734203
+  }
+}
